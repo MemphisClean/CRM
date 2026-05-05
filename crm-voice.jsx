@@ -207,11 +207,12 @@ exports.handler = function(context, event, callback) {
 // ─── Dialer Modal ─────────────────────────────────────────────────────────────
 // Statuses: 'init' | 'ready' | 'connecting' | 'connected' | 'ended' | 'error'
 function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
-  const [status,   setStatus]   = useState9('init');
-  const [error,    setError]    = useState9('');
-  const [seconds,  setSeconds]  = useState9(0);
-  const [muted,    setMuted]    = useState9(false);
-  const [showSettings, setShowSettings] = useState9(false);
+  const [status,      setStatus]      = useState9('init');
+  const [error,       setError]       = useState9('');
+  const [seconds,     setSeconds]     = useState9(0);
+  const [muted,       setMuted]       = useState9(false);
+  const [showSettings,setShowSettings]= useState9(false);
+  const [showKeypad,  setShowKeypad]  = useState9(false);
 
   const deviceRef  = useRef9(null);
   const callRef    = useRef9(null);
@@ -323,6 +324,10 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
     setMuted(next);
   };
 
+  const handleDtmf = (key) => {
+    if (callRef.current) { try { callRef.current.sendDigits(key); } catch {} }
+  };
+
   const handleDone = () => {
     const duration = seconds > 0 ? fmtDuration(seconds) : null;
     onCallEnded && onCallEnded(duration);
@@ -387,13 +392,29 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
 
           {/* Controls */}
           {status === 'connected' && (
-            <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:0 }}>
-              <button onClick={handleMute} style={{ width:56, height:56, borderRadius:'50%', border:'2px solid #E5E7EB', background: muted ? '#FEF3C7' : '#fff', cursor:'pointer', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }} title={muted ? 'Unmute' : 'Mute'}>
-                {muted ? '🔇' : '🎙'}
-              </button>
-              <button onClick={handleHangUp} style={{ width:56, height:56, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(244,63,94,0.4)' }} title="Hang up">
-                📵
-              </button>
+            <div>
+              <div style={{ display:'flex', gap:10, justifyContent:'center', marginBottom: showKeypad ? 16 : 0 }}>
+                <button onClick={handleMute} style={{ width:52, height:52, borderRadius:'50%', border:'2px solid #E5E7EB', background: muted ? '#FEF3C7' : '#fff', cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }} title={muted ? 'Unmute' : 'Mute'}>
+                  {muted ? '🔇' : '🎙'}
+                </button>
+                <button onClick={handleHangUp} style={{ width:56, height:56, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(244,63,94,0.4)' }} title="Hang up">
+                  📵
+                </button>
+                <button onClick={()=>setShowKeypad(k=>!k)} title="Keypad" style={{ width:52, height:52, borderRadius:'50%', border:`2px solid ${showKeypad ? NAVY : '#E5E7EB'}`, background: showKeypad ? '#EEF0FB' : '#fff', cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
+                  #️⃣
+                </button>
+              </div>
+              {showKeypad && (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8 }}>
+                  {['1','2','3','4','5','6','7','8','9','*','0','#'].map(k => (
+                    <button key={k} onClick={()=>handleDtmf(k)} style={{ height:44, borderRadius:10, border:'1.5px solid #E5E7EB', background:'#F9FAFB', color:'#1A1D2E', fontSize:16, fontWeight:700, cursor:'pointer', transition:'background 0.1s' }}
+                      onMouseDown={e=>e.currentTarget.style.background='#E5E7EB'}
+                      onMouseUp={e=>e.currentTarget.style.background='#F9FAFB'}
+                      onMouseLeave={e=>e.currentTarget.style.background='#F9FAFB'}
+                    >{k}</button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -429,4 +450,225 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
   );
 }
 
-Object.assign(window, { TwilioDialer, TwilioVoiceSettings });
+// ─── Manual Keypad Dialer ────────────────────────────────────────────────────
+const DIAL_KEYS = [
+  { k:'1', sub:'' }, { k:'2', sub:'ABC' }, { k:'3', sub:'DEF' },
+  { k:'4', sub:'GHI' }, { k:'5', sub:'JKL' }, { k:'6', sub:'MNO' },
+  { k:'7', sub:'PQRS' }, { k:'8', sub:'TUV' }, { k:'9', sub:'WXYZ' },
+  { k:'*', sub:'' }, { k:'0', sub:'+' }, { k:'#', sub:'' },
+];
+
+function TwilioManualDialer({ onClose, contactName, currentUser }) {
+  const [dialNumber,   setDialNumber]   = useState9('');
+  const [status,       setStatus]       = useState9('idle'); // idle|init|connecting|connected|ended|error
+  const [error,        setError]        = useState9('');
+  const [seconds,      setSeconds]      = useState9(0);
+  const [muted,        setMuted]        = useState9(false);
+  const [showKeypad,   setShowKeypad]   = useState9(false);
+  const [showSettings, setShowSettings] = useState9(false);
+
+  const deviceRef = useRef9(null);
+  const callRef   = useRef9(null);
+  const timerRef  = useRef9(null);
+
+  const fmtDuration = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+
+  useEffect9(() => () => {
+    clearInterval(timerRef.current);
+    if (callRef.current)  { try { callRef.current.disconnect();  } catch {} }
+    if (deviceRef.current){ try { deviceRef.current.destroy();   } catch {} }
+  }, []);
+
+  const pressKey = (key) => {
+    if (status === 'idle') {
+      setDialNumber(n => n + key);
+    } else if (status === 'connected') {
+      if (callRef.current) { try { callRef.current.sendDigits(key); } catch {} }
+    }
+  };
+
+  const handleCall = async () => {
+    const num = dialNumber.trim();
+    if (!num) return;
+    setStatus('init');
+    let mounted = true;
+
+    const ensureSDK = () => new Promise((resolve) => {
+      if (window.Twilio && window.Twilio.Device) { resolve(true); return; }
+      const inject = () => {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/@twilio/voice-sdk@2.12.0/dist/twilio.min.js';
+        s.crossOrigin = 'anonymous';
+        s.onload = () => resolve(!!(window.Twilio && window.Twilio.Device));
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+      };
+      let tries = 0;
+      const poll = setInterval(() => {
+        tries++;
+        if (window.Twilio && window.Twilio.Device) { clearInterval(poll); resolve(true); return; }
+        if (tries >= 8) { clearInterval(poll); inject(); }
+      }, 250);
+    });
+
+    try {
+      const settings = await fetchVoiceSettings();
+      if (!mounted) return;
+      if (!settings.tokenUrl) { setStatus('error'); setError('No Token URL configured. Click ⚙ Twilio to configure.'); return; }
+
+      const sdkReady = await ensureSDK();
+      if (!mounted) return;
+      if (!sdkReady) { setStatus('error'); setError('Twilio Voice SDK failed to load. Please reload and try again.'); return; }
+
+      const resp = await fetch(settings.tokenUrl);
+      if (!resp.ok) throw new Error(`Token fetch failed: HTTP ${resp.status}`);
+      const { token } = await resp.json();
+      if (!mounted) return;
+
+      const device = new window.Twilio.Device(token, { logLevel: 'warn', edge: 'roaming' });
+      deviceRef.current = device;
+      device.on('error', err => { if (mounted) { setStatus('error'); setError(err.message || 'Device error'); } });
+
+      await device.register();
+      if (!mounted) return;
+
+      setStatus('connecting');
+      const call = await device.connect({ params: { To: num } });
+      callRef.current = call;
+
+      call.on('accept', () => { if (mounted) { setStatus('connected'); timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000); } });
+      call.on('disconnect', () => { if (mounted) { clearInterval(timerRef.current); setStatus('ended'); } });
+      call.on('error', err => { if (mounted) { clearInterval(timerRef.current); setStatus('error'); setError(err.message || 'Call error'); } });
+
+    } catch (err) {
+      if (mounted) { setStatus('error'); setError(err.message); }
+    }
+
+    return () => { mounted = false; };
+  };
+
+  const handleHangUp = () => {
+    clearInterval(timerRef.current);
+    if (callRef.current) { try { callRef.current.disconnect(); } catch {} }
+    setStatus('ended');
+  };
+
+  const handleMute = () => {
+    if (!callRef.current) return;
+    const next = !muted;
+    callRef.current.mute(next);
+    setMuted(next);
+  };
+
+  const isActive  = status === 'connecting' || status === 'connected';
+  const statusColor = { idle:'#9CA3AF', init:'#9CA3AF', connecting:'#F97316', connected:'#10B981', ended:'#6B7280', error:'#F43F5E' }[status];
+
+  return (
+    <>
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}
+        onClick={(status==='ended'||status==='error'||status==='idle') ? onClose : undefined}>
+        <div style={{ background:'#1C1F33', borderRadius:24, width:320, padding:'20px 18px 24px', boxShadow:'0 32px 80px rgba(0,0,0,0.6)', position:'relative' }}
+          onClick={e=>e.stopPropagation()}>
+
+          {/* Top bar */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <button onClick={()=>setShowSettings(true)} style={{ border:'1px solid rgba(255,255,255,0.18)', background:'transparent', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', gap:4 }}>⚙ Twilio</button>
+            <div style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,0.5)' }}>Manual Dial</div>
+            <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,0.1)', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:15, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          </div>
+
+          {/* Number display */}
+          <div style={{ background:'rgba(255,255,255,0.06)', borderRadius:12, padding:'12px 16px', marginBottom:14, minHeight:58 }}>
+            {contactName && status === 'idle' && (
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)', marginBottom:2 }}>For: {contactName}</div>
+            )}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span style={{ fontSize:24, fontWeight:700, color: dialNumber ? '#fff' : 'rgba(255,255,255,0.2)', letterSpacing:'0.06em', fontVariantNumeric:'tabular-nums' }}>
+                {dialNumber || 'Enter number…'}
+              </span>
+              {dialNumber && status === 'idle' && (
+                <button onClick={()=>setDialNumber(n=>n.slice(0,-1))} style={{ border:'none', background:'none', cursor:'pointer', color:'rgba(255,255,255,0.45)', fontSize:20, padding:'0 2px', lineHeight:1 }}>⌫</button>
+              )}
+            </div>
+            {isActive && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:statusColor, display:'inline-block', animation:'blink 1.2s ease-in-out infinite' }}></span>
+                <span style={{ fontSize:12, color:statusColor, fontWeight:600 }}>
+                  {status==='connecting' ? 'Calling…' : `Connected · ${fmtDuration(seconds)}`}
+                </span>
+              </div>
+            )}
+            {status==='ended' && <div style={{ fontSize:12, color:'#6B7280', marginTop:4 }}>Call ended · {fmtDuration(seconds)}</div>}
+            {status==='init'  && <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)', marginTop:4 }}>Connecting to Twilio…</div>}
+          </div>
+
+          {/* Error */}
+          {status==='error' && (
+            <div style={{ background:'rgba(244,63,94,0.15)', border:'1px solid rgba(244,63,94,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#FB7185', marginBottom:12, lineHeight:1.5 }}>{error}</div>
+          )}
+
+          {/* Keypad — always visible when idle; toggle-able when connected */}
+          {(status==='idle' || (status==='connected' && showKeypad)) && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:9, marginBottom:14 }}>
+              {DIAL_KEYS.map(({ k, sub }) => (
+                <button key={k} onClick={()=>pressKey(k)}
+                  style={{ height:58, borderRadius:13, border:'none', background:'rgba(255,255,255,0.09)', color:'#fff', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, transition:'background 0.1s' }}
+                  onMouseDown={e=>e.currentTarget.style.background='rgba(255,255,255,0.22)'}
+                  onMouseUp={e=>e.currentTarget.style.background='rgba(255,255,255,0.09)'}
+                  onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.09)'}
+                >
+                  <span style={{ fontSize:20, fontWeight:600, lineHeight:1 }}>{k}</span>
+                  {sub && <span style={{ fontSize:8, color:'rgba(255,255,255,0.35)', letterSpacing:'0.08em' }}>{sub}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {status==='idle' && (
+            <button onClick={handleCall} disabled={!dialNumber.trim()}
+              style={{ width:'100%', height:56, borderRadius:14, border:'none', background: dialNumber ? '#10B981' : 'rgba(255,255,255,0.08)', color:'#fff', fontSize:24, cursor: dialNumber ? 'pointer' : 'default', transition:'background 0.2s', display:'flex', alignItems:'center', justifyContent:'center', boxShadow: dialNumber ? '0 4px 16px rgba(16,185,129,0.4)' : 'none' }}>
+              📞
+            </button>
+          )}
+
+          {status==='init' && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, color:'rgba(255,255,255,0.45)', fontSize:13, padding:'12px 0' }}>
+              <span style={{ display:'inline-block', width:14, height:14, border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'rgba(255,255,255,0.7)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}></span>
+              Connecting to Twilio…
+            </div>
+          )}
+
+          {status==='connecting' && (
+            <button onClick={handleHangUp} style={{ width:56, height:56, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto', boxShadow:'0 4px 14px rgba(244,63,94,0.4)' }}>📵</button>
+          )}
+
+          {status==='connected' && (
+            <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+              <button onClick={handleMute} title={muted?'Unmute':'Mute'}
+                style={{ width:52, height:52, borderRadius:'50%', border:`2px solid ${muted?'rgba(245,158,11,0.6)':'rgba(255,255,255,0.2)'}`, background: muted?'rgba(245,158,11,0.15)':'rgba(255,255,255,0.08)', cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {muted ? '🔇' : '🎙'}
+              </button>
+              <button onClick={handleHangUp} style={{ width:56, height:56, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(244,63,94,0.4)' }}>📵</button>
+              <button onClick={()=>setShowKeypad(k=>!k)} title="Keypad"
+                style={{ width:52, height:52, borderRadius:'50%', border:`2px solid ${showKeypad?'rgba(247,185,30,0.6)':'rgba(255,255,255,0.2)'}`, background: showKeypad?'rgba(247,185,30,0.12)':'rgba(255,255,255,0.08)', cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                #️⃣
+              </button>
+            </div>
+          )}
+
+          {(status==='ended'||status==='error') && (
+            <button onClick={onClose} style={{ width:'100%', padding:'13px', border:'none', borderRadius:14, background:NAVY, color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+              {status==='ended' ? `Done${seconds>0?' · '+fmtDuration(seconds):''}` : 'Close'}
+            </button>
+          )}
+
+        </div>
+      </div>
+
+      {showSettings && <TwilioVoiceSettings onClose={()=>setShowSettings(false)} currentUser={currentUser} />}
+    </>
+  );
+}
+
+Object.assign(window, { TwilioDialer, TwilioVoiceSettings, TwilioManualDialer });

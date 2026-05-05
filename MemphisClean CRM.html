@@ -196,7 +196,7 @@ function App() {
           <Dashboard contacts={scopedContacts} onOpenContact={openContact} />
         }
         {view === 'queue' &&
-          <CallQueue contacts={scopedContacts} setContacts={setContacts} onOpenContact={openContact} />
+          <CallQueue contacts={scopedContacts} setContacts={setContacts} onOpenContact={openContact} currentUser={currentUser} />
         }
         {view === 'pipeline' &&
           <Pipeline contacts={scopedContacts} setContacts={setContacts} onOpenContact={openContact} />

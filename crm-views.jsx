@@ -174,8 +174,9 @@ function Pipeline({ contacts, setContacts, onOpenContact }) {
 }
 
 // ── CALL QUEUE ─────────────────────────────────────────────────────
-function CallQueue({ contacts, setContacts, onOpenContact }) {
-  const [filter, setFilter] = useState2('all');
+function CallQueue({ contacts, setContacts, onOpenContact, currentUser }) {
+  const [filter,           setFilter]           = useState2('all');
+  const [showManualDialer, setShowManualDialer] = useState2(false);
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
@@ -199,13 +200,18 @@ function CallQueue({ contacts, setContacts, onOpenContact }) {
   const outcomeColor = (o) => o.includes('Interested') && !o.includes('Not') ? '#10B981' : o.includes('Not') ? '#F43F5E' : o.includes('Callback') ? '#F97316' : '#6B7280';
 
   return (
+    <>
     <div style={{ padding: '28px 32px', maxWidth: 900 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A1D2E', margin: 0 }}>Call Queue</h1>
           <p style={{ color: '#6B7280', fontSize: 13, margin: '3px 0 0' }}>Prioritised by follow-up date</p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => setShowManualDialer(true)} style={{ padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${NAVY}`, background: NAVY, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 14 }}>🔢</span> Manual Dial
+          </button>
+          <div style={{ width: 1, height: 22, background: '#E5E7EB', margin: '0 2px' }} />
           {[['today', 'Today'], ['week', 'This Week'], ['all', 'All Active']].map(([v, l]) =>
           <button key={v} onClick={() => setFilter(v)} style={{ padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${filter === v ? NAVY : '#E5E7EB'}`, background: filter === v ? NAVY : '#fff', color: filter === v ? '#fff' : '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
           )}
@@ -252,7 +258,9 @@ function CallQueue({ contacts, setContacts, onOpenContact }) {
 
         })}
       </div>
-    </div>);
+    </div>
+    {showManualDialer && <TwilioManualDialer onClose={()=>setShowManualDialer(false)} currentUser={currentUser} />}
+    </>);
 
 }
 

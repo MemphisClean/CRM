@@ -207,10 +207,11 @@ function AddContactModal({ onSave, onClose, editContact, existingContacts = [] }
 }
 
 function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
-  const [showCallModal, setShowCallModal] = useState3(false);
-  const [showEditModal, setShowEditModal] = useState3(false);
-  const [showEmailModal, setShowEmailModal] = useState3(false);
-  const [showDialer, setShowDialer] = useState3(false);
+  const [showCallModal,       setShowCallModal]       = useState3(false);
+  const [showEditModal,       setShowEditModal]       = useState3(false);
+  const [showEmailModal,      setShowEmailModal]      = useState3(false);
+  const [showDialer,          setShowDialer]          = useState3(false);
+  const [showManualDialer,    setShowManualDialer]    = useState3(false);
   const [dialerPrefilledDuration, setDialerPrefilledDuration] = useState3(null);
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '—';
   const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'}) : '';
@@ -263,6 +264,10 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
             <button onClick={()=>setShowDialer(true)} style={{ flex:1, minWidth:100, padding:'9px', background:GOLD, border:'none', borderRadius:8, color:NAVY, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
               <Icon path="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" size={15} color={NAVY} />
               Call
+            </button>
+            <button onClick={()=>setShowManualDialer(true)} title="Dial an alternate number for this contact" style={{ padding:'9px 11px', background:'#fff', border:'1.5px solid #E5E7EB', borderRadius:8, color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+              <Icon path="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" size={14} color='#374151' />
+              Alt #
             </button>
             <button onClick={()=>setShowCallModal(true)} style={{ padding:'9px 12px', background:'#fff', border:'1.5px solid #E5E7EB', borderRadius:8, color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
               <Icon path="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" size={14} color='#374151' />
@@ -343,6 +348,7 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
       </div>
 
       {showDialer && <TwilioDialer contact={contact} onClose={()=>setShowDialer(false)} onCallEnded={handleCallEnded} currentUser={currentUser} />}
+      {showManualDialer && <TwilioManualDialer onClose={()=>setShowManualDialer(false)} contactName={contact.company} currentUser={currentUser} />}
       {showCallModal && <CallLogModal contact={contact} prefilledDuration={dialerPrefilledDuration} onSave={handleLogSave} onClose={()=>{setShowCallModal(false);setDialerPrefilledDuration(null);}} />}
       {showEditModal && <AddContactModal editContact={contact} onSave={(updated)=>{onUpdate(updated);setShowEditModal(false);}} onClose={()=>setShowEditModal(false)} />}
       {showEmailModal && <EmailComposer contact={contact} onClose={()=>setShowEmailModal(false)} />}
