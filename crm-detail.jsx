@@ -6,9 +6,12 @@ const detailOutcomeOptions = window.CRM_DATA.outcomes;
 const detailStages = window.CRM_DATA.stages;
 
 // ─── Recording Player ─────────────────────────────────────────────────────────
-function RecordingPlayer({ callSid }) {
+function RecordingPlayer({ callSid, currentUser }) {
   const [state,    setState]    = useState3('idle'); // idle|loading|notfound|ready|error
   const [audioUrl, setAudioUrl] = useState3(null);
+
+  // Only admins can access recordings
+  if (!callSid || !currentUser || currentUser.role !== 'admin') return null;
 
   const load = async () => {
     setState('loading');
@@ -36,8 +39,6 @@ function RecordingPlayer({ callSid }) {
       setState('ready');
     } catch { setState('error'); }
   };
-
-  if (!callSid) return null;
 
   if (state === 'idle') return (
     <button onClick={load} style={{ marginTop:5, marginLeft:13, fontSize:11, color:NAVY, background:`${NAVY}12`, border:`1px solid ${NAVY}25`, borderRadius:6, padding:'3px 9px', cursor:'pointer', fontWeight:600, display:'inline-flex', alignItems:'center', gap:4 }}>
@@ -414,7 +415,7 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
                   </div>
                   {l.notes && <p style={{ margin:'0 0 4px 13px', fontSize:12, color:'#6B7280', lineHeight:1.5 }}>{l.notes}</p>}
                   {l.nextAction && <div style={{ marginLeft:13, fontSize:11, color:'#F97316', fontWeight:600 }}>→ {l.nextAction}</div>}
-                  {l.callSid && <RecordingPlayer callSid={l.callSid} />}
+                  {l.callSid && <RecordingPlayer callSid={l.callSid} currentUser={currentUser} />}
                 </div>
               ))}
             </div>
