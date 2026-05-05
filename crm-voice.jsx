@@ -23,12 +23,16 @@ async function fetchVoiceSettings() {
 }
 
 // ─── Settings Modal ──────────────────────────────────────────────────────────
-function TwilioVoiceSettings({ onClose }) {
+function TwilioVoiceSettings({ onClose, currentUser }) {
   const saved = loadVoiceSettings();
   const [tokenUrl,   setTokenUrl]   = useState9(saved.tokenUrl   || '');
   const [fromNumber, setFromNumber] = useState9(saved.fromNumber || '');
-  const [ok, setOk] = useState9(false);
-  const [showCode, setShowCode] = useState9(false);
+  const [ok,         setOk]         = useState9(false);
+  const [showCode,   setShowCode]   = useState9(false);
+  const [testState,  setTestState]  = useState9('idle'); // 'idle'|'testing'|'ok'|'fail'
+  const [testMsg,    setTestMsg]    = useState9('');
+
+  const isAdmin = currentUser && currentUser.role === 'admin';
 
   // Load latest from Firestore on open
   useEffect9(() => {
@@ -38,7 +42,38 @@ function TwilioVoiceSettings({ onClose }) {
     });
   }, []);
 
+  const handleTest = async () => {
+    const url = tokenUrl.trim();
+    if (!url) { setTestState('fail'); setTestMsg('Enter a URL first.'); return; }
+    setTestState('testing');
+    setTestMsg('');
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        setTestState('fail');
+        setTestMsg(`HTTP ${resp.status} — check your Twilio Function is deployed and public.`);
+        return;
+      }
+      const data = await resp.json();
+      if (data.token) {
+        setTestState('ok');
+        setTestMsg('Connection successful — token received!');
+      } else {
+        setTestState('fail');
+        setTestMsg('URL responded but returned no token. Check your /token Function code.');
+      }
+    } catch (e) {
+      setTestState('fail');
+      if (e.message && e.message.toLowerCase().includes('failed to fetch')) {
+        setTestMsg('Failed to fetch — URL is unreachable or blocked by CORS. Verify the Twilio Function is deployed and has Access-Control-Allow-Origin: * in the response headers.');
+      } else {
+        setTestMsg(e.message || 'Unknown error');
+      }
+    }
+  };
+
   const handleSave = () => {
+    if (!isAdmin) return; // only admin can save
     const settings = { tokenUrl: tokenUrl.trim(), fromNumber: fromNumber.trim() };
     // Save to localStorage AND Firestore so all devices get it
     localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
@@ -49,40 +84,85 @@ function TwilioVoiceSettings({ onClose }) {
     setTimeout(onClose, 700);
   };
 
+  const testColor = { idle:'#6B7280', testing:'#F97316', ok:'#10B981', fail:'#F43F5E' }[testState];
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
       <div style={{ background:'#fff', borderRadius:16, width:'100%', maxWidth:520, maxHeight:'90vh', overflowY:'auto', padding:'28px', boxShadow:'0 24px 80px rgba(0,0,0,0.25)' }} onClick={e=>e.stopPropagation()}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div>
             <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#1A1D2E' }}>Twilio Voice Settings</h2>
-            <p style={{ margin:'3px 0 0', fontSize:12, color:'#6B7280' }}>Configure browser-to-phone calling</p>
+            <p style={{ margin:'3px 0 0', fontSize:12, color:'#6B7280' }}>Configure browser-to-phone calling{!isAdmin ? ' — view only' : ''}</p>
           </div>
           <button onClick={onClose} style={{ border:'none', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280' }}>×</button>
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:20 }}>
+        {!isAdmin && (
+          <div style={{ background:'#FEF3C7', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#92400E', marginBottom:16 }}>
+            🔒 Only admins can change Twilio settings. Contact your administrator.
+          </div>
+        )}
+
+        <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
           <div>
             <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Token Function URL</label>
-            <input value={tokenUrl} onChange={e=>setTokenUrl(e.target.value)} placeholder="https://your-service-1234.twil.io/token" style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box', fontFamily:'monospace' }} />
+            <input
+              value={tokenUrl}
+              onChange={e=>{ setTokenUrl(e.target.value); setTestState('idle'); }}
+              placeholder="https://your-service-1234.twil.io/token"
+              readOnly={!isAdmin}
+              style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box', fontFamily:'monospace', background: isAdmin ? '#fff' : '#F9FAFB', color: isAdmin ? '#1A1D2E' : '#6B7280' }}
+            />
           </div>
           <div>
             <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Your Twilio Number (caller ID)</label>
-            <input value={fromNumber} onChange={e=>setFromNumber(e.target.value)} placeholder="+19015192057" style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' }} />
+            <input
+              value={fromNumber}
+              onChange={e=>setFromNumber(e.target.value)}
+              placeholder="+19015192057"
+              readOnly={!isAdmin}
+              style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box', background: isAdmin ? '#fff' : '#F9FAFB', color: isAdmin ? '#1A1D2E' : '#6B7280' }}
+            />
           </div>
         </div>
 
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginBottom:16 }}>
-          <button onClick={onClose} style={{ padding:'8px 18px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
-          <button onClick={handleSave} style={{ padding:'8px 20px', border:'none', borderRadius:8, background: ok ? '#10B981' : NAVY, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', transition:'background 0.2s' }}>
-            {ok ? '✓ Saved!' : 'Save Settings'}
+        {/* Test Connection */}
+        <div style={{ marginBottom:16 }}>
+          <button onClick={handleTest} disabled={testState==='testing'} style={{ padding:'8px 16px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#F9FAFB', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:7 }}>
+            {testState === 'testing'
+              ? <><span style={{ display:'inline-block', width:12, height:12, border:'2px solid #D1D5DB', borderTopColor:'#6B7280', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}></span> Testing…</>
+              : '🔌 Test Connection'
+            }
           </button>
+          {testMsg && (
+            <div style={{ marginTop:8, padding:'8px 12px', borderRadius:8, background: testState==='ok' ? '#ECFDF5' : '#FFF1F2', border:`1px solid ${testState==='ok' ? '#A7F3D0' : '#FECDD3'}`, fontSize:12, color:testColor, lineHeight:1.5 }}>
+              {testMsg}
+            </div>
+          )}
         </div>
 
-        <button onClick={()=>setShowCode(c=>!c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:'#6B7280', padding:0, textDecoration:'underline' }}>
-          {showCode ? 'Hide' : 'Show'} Twilio Function setup instructions
-        </button>
+        {isAdmin && (
+          <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginBottom:16 }}>
+            <button onClick={onClose} style={{ padding:'8px 18px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+            <button onClick={handleSave} style={{ padding:'8px 20px', border:'none', borderRadius:8, background: ok ? '#10B981' : NAVY, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', transition:'background 0.2s' }}>
+              {ok ? '✓ Saved!' : 'Save Settings'}
+            </button>
+          </div>
+        )}
 
-        {showCode && (
+        {!isAdmin && (
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
+            <button onClick={onClose} style={{ padding:'8px 20px', border:'none', borderRadius:8, background:NAVY, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>Close</button>
+          </div>
+        )}
+
+        {isAdmin && (
+          <button onClick={()=>setShowCode(c=>!c)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:12, color:'#6B7280', padding:0, textDecoration:'underline' }}>
+            {showCode ? 'Hide' : 'Show'} Twilio Function setup instructions
+          </button>
+        )}
+
+        {isAdmin && showCode && (
           <div style={{ background:'#F0F4FF', border:'1px solid #C7D2FE', borderRadius:10, padding:'14px 16px', marginTop:12 }}>
             <ol style={{ margin:0, paddingLeft:16, fontSize:12, color:'#374151', lineHeight:2 }}>
               <li>Go to <strong>console.twilio.com → Functions & Assets</strong></li>
@@ -126,7 +206,7 @@ exports.handler = function(context, event, callback) {
 
 // ─── Dialer Modal ─────────────────────────────────────────────────────────────
 // Statuses: 'init' | 'ready' | 'connecting' | 'connected' | 'ended' | 'error'
-function TwilioDialer({ contact, onClose, onCallEnded }) {
+function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
   const [status,   setStatus]   = useState9('init');
   const [error,    setError]    = useState9('');
   const [seconds,  setSeconds]  = useState9(0);
@@ -338,7 +418,7 @@ function TwilioDialer({ contact, onClose, onCallEnded }) {
         </div>
       </div>
 
-      {showSettings && <TwilioVoiceSettings onClose={() => setShowSettings(false)} />}
+      {showSettings && <TwilioVoiceSettings onClose={() => setShowSettings(false)} currentUser={currentUser} />}
 
       <style>{`
         @keyframes spin        { to { transform: rotate(360deg); } }

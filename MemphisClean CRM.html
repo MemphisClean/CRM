@@ -222,7 +222,8 @@ function App() {
         <ContactDetail
           contact={activeContact}
           onClose={() => setActiveContact(null)}
-          onUpdate={updateContact} />
+          onUpdate={updateContact}
+          currentUser={currentUser} />
       }
 
       {showAddModal &&

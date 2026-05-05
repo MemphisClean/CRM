@@ -206,7 +206,7 @@ function AddContactModal({ onSave, onClose, editContact, existingContacts = [] }
   );
 }
 
-function ContactDetail({ contact, onClose, onUpdate, onLogCall }) {
+function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
   const [showCallModal, setShowCallModal] = useState3(false);
   const [showEditModal, setShowEditModal] = useState3(false);
   const [showEmailModal, setShowEmailModal] = useState3(false);
@@ -342,7 +342,7 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall }) {
         </div>
       </div>
 
-      {showDialer && <TwilioDialer contact={contact} onClose={()=>setShowDialer(false)} onCallEnded={handleCallEnded} />}
+      {showDialer && <TwilioDialer contact={contact} onClose={()=>setShowDialer(false)} onCallEnded={handleCallEnded} currentUser={currentUser} />}
       {showCallModal && <CallLogModal contact={contact} prefilledDuration={dialerPrefilledDuration} onSave={handleLogSave} onClose={()=>{setShowCallModal(false);setDialerPrefilledDuration(null);}} />}
       {showEditModal && <AddContactModal editContact={contact} onSave={(updated)=>{onUpdate(updated);setShowEditModal(false);}} onClose={()=>setShowEditModal(false)} />}
       {showEmailModal && <EmailComposer contact={contact} onClose={()=>setShowEmailModal(false)} />}
