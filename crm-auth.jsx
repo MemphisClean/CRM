@@ -1,8 +1,18 @@
 // Auth / Login Screen — PIN-protected reps + admin rep management
 const { useState: useState8, useEffect: useEffect8 } = React;
 
-const ADMIN_PIN = '1234';
+const ADMIN_PIN = '1234'; // hardcoded fallback only — real PIN stored in Firestore
 const REPS_STORAGE_KEY = 'memphisclean_crm_reps';
+
+async function fetchAdminPin() {
+  try {
+    if (typeof db !== 'undefined') {
+      const doc = await db.collection('settings').doc('adminPin').get();
+      if (doc.exists && doc.data().pin) return doc.data().pin;
+    }
+  } catch(e) {}
+  return ADMIN_PIN;
+}
 
 const AVATAR_COLORS = ['#2B3990','#0E7490','#7C3AED','#059669','#DC2626','#D97706','#DB2777','#0284C7'];
 
@@ -92,6 +102,7 @@ function LoginScreen({ onLogin }) {
   const [reps, setReps] = useState8(loadReps);
   const [step, setStep] = useState8('select'); // select | rep-pin | admin-pin
   const [selectedRep, setSelectedRep] = useState8(null);
+  const [adminPin, setAdminPin] = useState8(ADMIN_PIN);
 
   // Keep reps in sync with localStorage changes (from settings screen)
   useEffect8(() => {
@@ -112,6 +123,9 @@ function LoginScreen({ onLogin }) {
       }
     }).catch(console.error);
   }, []);
+
+  // Load admin PIN from Firestore
+  useEffect8(() => { fetchAdminPin().then(p => setAdminPin(p)); }, []);
 
   const handleRepSelect = (rep) => {
     setSelectedRep(rep);
@@ -183,13 +197,99 @@ function LoginScreen({ onLogin }) {
           <PinPad
             title="Administrator"
             subtitle="Enter admin PIN to unlock full access"
-            correctPin={ADMIN_PIN}
+            correctPin={adminPin}
             onSuccess={() => onLogin({ id:'admin', name:'Administrator', initials:'AD', color:NAVY, role:'admin' })}
             onBack={() => setStep('select')}
           />
         )}
 
         <p style={{ color:'rgba(255,255,255,0.18)', fontSize:11, textAlign:'center', marginTop:18 }}>MemphisClean CRM · South Africa</p>
+      </div>
+    </div>
+  );
+}
+
+// ── CHANGE ADMIN PIN MODAL ────────────────────────────────────────
+function ChangeAdminPinModal({ onClose }) {
+  const [loadedPin,   setLoadedPin]   = useState8(null);
+  const [currentPin,  setCurrentPin]  = useState8('');
+  const [newPin,      setNewPin]      = useState8('');
+  const [confirm,     setConfirm]     = useState8('');
+  const [error,       setError]       = useState8('');
+  const [saved,       setSaved]       = useState8(false);
+
+  useEffect8(() => { fetchAdminPin().then(p => setLoadedPin(p)); }, []);
+
+  const pinsMatch = newPin.length >= 4 && newPin === confirm;
+  const canSave   = currentPin.length >= 4 && pinsMatch;
+
+  const handleSave = () => {
+    if (loadedPin === null) { setError('Still loading — please wait a moment.'); return; }
+    if (currentPin !== loadedPin) { setError('Current PIN is incorrect.'); return; }
+    if (!pinsMatch) { setError('New PINs do not match.'); return; }
+    if (newPin === loadedPin) { setError('New PIN must be different from current PIN.'); return; }
+    db.collection('settings').doc('adminPin').set({ pin: newPin })
+      .then(() => { setSaved(true); setTimeout(onClose, 700); })
+      .catch(() => setError('Failed to save. Please try again.'));
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:16, width:380, padding:'28px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#1A1D2E' }}>Change Admin PIN</h2>
+            <p style={{ margin:'3px 0 0', fontSize:12, color:'#6B7280' }}>Stored securely — syncs across all devices</p>
+          </div>
+          <button onClick={onClose} style={{ border:'none', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280' }}>×</button>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Current Admin PIN</label>
+            <input
+              type="password"
+              value={currentPin}
+              onChange={e => { setCurrentPin(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+              placeholder="••••"
+              maxLength={6}
+              style={{ width:'100%', padding:'10px 12px', border:`1.5px solid ${error.includes('Current')?'#F43F5E':'#E5E7EB'}`, borderRadius:8, fontSize:16, outline:'none', boxSizing:'border-box', letterSpacing:'0.3em', textAlign:'center' }}
+            />
+          </div>
+          <div style={{ borderTop:'1px solid #F3F4F6', paddingTop:14 }}>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>New PIN (4–6 digits)</label>
+            <input
+              type="password"
+              value={newPin}
+              onChange={e => { setNewPin(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+              placeholder="••••"
+              maxLength={6}
+              style={{ width:'100%', padding:'10px 12px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:16, outline:'none', boxSizing:'border-box', letterSpacing:'0.3em', textAlign:'center' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Confirm New PIN</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => { setConfirm(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+              placeholder="••••"
+              maxLength={6}
+              style={{ width:'100%', padding:'10px 12px', border:`1.5px solid ${confirm && pinsMatch?'#10B981':confirm && !pinsMatch?'#F43F5E':'#E5E7EB'}`, borderRadius:8, fontSize:16, outline:'none', boxSizing:'border-box', letterSpacing:'0.3em', textAlign:'center' }}
+            />
+          </div>
+          {error && <div style={{ fontSize:12, color:'#F43F5E', fontWeight:600 }}>⚠ {error}</div>}
+          {!error && pinsMatch && currentPin.length >= 4 && (
+            <div style={{ fontSize:12, color:'#10B981', fontWeight:600 }}>✓ Ready to update</div>
+          )}
+        </div>
+
+        <div style={{ display:'flex', gap:10, marginTop:22, justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'8px 18px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={!canSave} style={{ padding:'8px 20px', border:'none', borderRadius:8, background:saved?'#10B981':canSave?NAVY:'#E5E7EB', color:canSave?'#fff':'#9CA3AF', fontSize:13, fontWeight:700, cursor:canSave?'pointer':'not-allowed', transition:'background 0.2s' }}>
+            {saved ? '✓ Updated!' : 'Update Admin PIN'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -202,6 +302,7 @@ function RepManager() {
   const [editRep, setEditRep] = useState8(null);
   const [confirmDelete, setConfirmDelete] = useState8(null);
   const [changePinRep, setChangePinRep] = useState8(null);
+  const [showAdminPin, setShowAdminPin] = useState8(false);
 
   const persist = (updated) => {
     setReps(updated);
@@ -236,6 +337,21 @@ function RepManager() {
         </button>
       </div>
 
+      {/* Admin PIN card */}
+      <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:12, padding:'16px 20px', display:'flex', alignItems:'center', gap:16, marginBottom:20 }}>
+        <div style={{ width:46, height:46, borderRadius:'50%', background:'rgba(247,185,30,0.15)', border:'1.5px solid rgba(247,185,30,0.4)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <Icon path="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" size={20} color={GOLD} />
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:'#1A1D2E' }}>Administrator</div>
+          <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>PIN: ••••  ·  Full access account</div>
+        </div>
+        <button onClick={() => setShowAdminPin(true)} style={{ padding:'6px 14px', border:'1.5px solid #FDE68A', borderRadius:7, background:'#FFFBEB', color:'#92400E', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+          <Icon path="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" size={12} color='#92400E' />
+          Change PIN
+        </button>
+      </div>
+
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
         {reps.map(rep => (
           <div key={rep.id} style={{ background:'#fff', border:'1px solid #E9EBF0', borderRadius:12, padding:'16px 20px', display:'flex', alignItems:'center', gap:16 }}>
@@ -263,7 +379,10 @@ function RepManager() {
         )}
       </div>
 
-      {/* Change PIN Modal */}
+      {/* Change Admin PIN Modal */}
+      {showAdminPin && <ChangeAdminPinModal onClose={() => setShowAdminPin(false)} />}
+
+      {/* Change Rep PIN Modal */}
       {changePinRep && (
         <ChangePinModal rep={changePinRep} onSave={(updated) => { persist(reps.map(r => r.id === updated.id ? updated : r)); setChangePinRep(null); }} onClose={() => setChangePinRep(null)} />
       )}
