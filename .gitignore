@@ -3,6 +3,7 @@
 
 # Allow the CRM app files
 !.gitignore
+!.nojekyll
 !README.md
 !index.html
 !MemphisClean CRM.html
