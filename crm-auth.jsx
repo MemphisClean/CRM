@@ -201,6 +201,7 @@ function RepManager() {
   const [showAdd, setShowAdd] = useState8(false);
   const [editRep, setEditRep] = useState8(null);
   const [confirmDelete, setConfirmDelete] = useState8(null);
+  const [changePinRep, setChangePinRep] = useState8(null);
 
   const persist = (updated) => {
     setReps(updated);
@@ -248,6 +249,10 @@ function RepManager() {
               </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setChangePinRep(rep)} style={{ padding:'6px 14px', border:'1.5px solid #E0E7FF', borderRadius:7, background:'#EEF2FF', color:'#3730A3', fontSize:12, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }}>
+                <Icon path="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" size={12} color='#3730A3' />
+                PIN
+              </button>
               <button onClick={() => { setEditRep(rep); setShowAdd(true); }} style={{ padding:'6px 14px', border:'1.5px solid #E5E7EB', borderRadius:7, background:'#fff', color:'#374151', fontSize:12, fontWeight:600, cursor:'pointer' }}>Edit</button>
               <button onClick={() => setConfirmDelete(rep)} style={{ padding:'6px 14px', border:'1.5px solid #FEE2E2', borderRadius:7, background:'#FFF5F5', color:'#DC2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>Remove</button>
             </div>
@@ -257,6 +262,11 @@ function RepManager() {
           <div style={{ textAlign:'center', padding:'40px 0', color:'#9CA3AF', fontSize:14, border:'2px dashed #E5E7EB', borderRadius:12 }}>No reps yet — add one above.</div>
         )}
       </div>
+
+      {/* Change PIN Modal */}
+      {changePinRep && (
+        <ChangePinModal rep={changePinRep} onSave={(updated) => { persist(reps.map(r => r.id === updated.id ? updated : r)); setChangePinRep(null); }} onClose={() => setChangePinRep(null)} />
+      )}
 
       {/* Add/Edit Modal */}
       {showAdd && (
@@ -276,6 +286,72 @@ function RepManager() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ChangePinModal({ rep, onSave, onClose }) {
+  const [pin,     setPin]     = useState8('');
+  const [confirm, setConfirm] = useState8('');
+  const [error,   setError]   = useState8('');
+  const [saved,   setSaved]   = useState8(false);
+
+  const canSave = pin.length >= 4 && pin === confirm;
+
+  const handleSave = () => {
+    if (pin !== confirm) { setError('PINs do not match.'); return; }
+    if (pin.length < 4)  { setError('PIN must be at least 4 digits.'); return; }
+    setSaved(true);
+    setTimeout(() => { onSave({ ...rep, pin }); onClose(); }, 600);
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:16, width:360, padding:'28px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#1A1D2E' }}>Change PIN</h2>
+            <p style={{ margin:'3px 0 0', fontSize:12, color:'#6B7280' }}>{rep.name}</p>
+          </div>
+          <button onClick={onClose} style={{ border:'none', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280' }}>×</button>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>New PIN (4–6 digits)</label>
+            <input
+              type="password"
+              value={pin}
+              onChange={e => { setPin(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+              placeholder="••••"
+              maxLength={6}
+              style={{ width:'100%', padding:'10px 12px', border:`1.5px solid ${error?'#F43F5E':'#E5E7EB'}`, borderRadius:8, fontSize:16, outline:'none', boxSizing:'border-box', letterSpacing:'0.3em', textAlign:'center' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Confirm New PIN</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => { setConfirm(e.target.value.replace(/\D/g,'').slice(0,6)); setError(''); }}
+              placeholder="••••"
+              maxLength={6}
+              style={{ width:'100%', padding:'10px 12px', border:`1.5px solid ${error?'#F43F5E': confirm && confirm===pin ?'#10B981':'#E5E7EB'}`, borderRadius:8, fontSize:16, outline:'none', boxSizing:'border-box', letterSpacing:'0.3em', textAlign:'center' }}
+            />
+          </div>
+          {error && <div style={{ fontSize:12, color:'#F43F5E', fontWeight:600 }}>⚠ {error}</div>}
+          {!error && confirm && confirm === pin && pin.length >= 4 && (
+            <div style={{ fontSize:12, color:'#10B981', fontWeight:600 }}>✓ PINs match</div>
+          )}
+        </div>
+
+        <div style={{ display:'flex', gap:10, marginTop:22, justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'8px 18px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+          <button onClick={handleSave} disabled={!canSave} style={{ padding:'8px 20px', border:'none', borderRadius:8, background:saved?'#10B981':canSave?NAVY:'#E5E7EB', color:canSave?'#fff':'#9CA3AF', fontSize:13, fontWeight:700, cursor:canSave?'pointer':'not-allowed', transition:'background 0.2s' }}>
+            {saved ? '✓ Saved!' : 'Update PIN'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
