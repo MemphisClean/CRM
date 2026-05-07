@@ -18,9 +18,12 @@ function findDuplicate(newContact, existingContacts) {
 const FIELD_MAP_OPTIONS = [
   { value:'', label:'— Skip —' },
   { value:'company', label:'Company Name' },
-  { value:'contactPerson', label:'Contact Person' },
+  { value:'contactPerson', label:'Contact Person (full name)' },
+  { value:'firstName', label:'First Name' },
+  { value:'lastName', label:'Last Name' },
   { value:'title', label:'Job Title' },
   { value:'phone', label:'Phone Number' },
+  { value:'altPhone', label:'Alt Phone' },
   { value:'email', label:'Email Address' },
   { value:'notes', label:'Notes' },
   { value:'website', label:'Website' },
@@ -28,14 +31,17 @@ const FIELD_MAP_OPTIONS = [
 ];
 
 const AUTO_MAP = {
-  company:['company','business','business name','organisation','organization','name','trading name','store'],
-  contactPerson:['contact','contact person','full name','name','first name','person','owner','manager'],
-  title:['title','job title','position','role','designation'],
-  phone:['phone','telephone','tel','mobile','cell','number','contact number','phone number'],
-  email:['email','e-mail','email address','mail'],
-  notes:['notes','note','comments','description','remarks'],
-  website:['website','url','web','site','domain'],
-  address:['address','location','street','physical address'],
+  company:       ['company name','company','business name','organisation','organization','trading name','store'],
+  firstName:     ['first name'],
+  lastName:      ['last name','surname','family name'],
+  contactPerson: ['contact person','full name','contact','person','owner'],
+  title:         ['title','job title','position','role','designation'],
+  phone:         ['work direct phone','direct phone','work phone','phone number','phone','telephone','tel','mobile phone','mobile','cell'],
+  altPhone:      ['corporate phone','other phone','home phone','alternate phone','alt phone'],
+  email:         ['email','e-mail','email address','mail'],
+  notes:         ['notes','note','comments','description','remarks'],
+  website:       ['website','url','web','site','domain'],
+  address:       ['company address','address','location','street','physical address'],
 };
 
 function autoDetect(header) {
@@ -102,14 +108,26 @@ function ImportLeads({ onImport, existingContacts = [] }) {
   const buildPreview = () => {
     const rows = (rawData||[]).slice(0,5).map(row => {
       const obj = {};
-      Object.entries(mapping).forEach(([colIdx, field]) => { if(field) obj[field] = row[colIdx]||''; });
-      return obj;
+      Object.entries(mapping).forEach(([colIdx, field]) => {
+        if (field) {
+          const val = (row[colIdx] || '').replace(/^'+/, '').trim();
+          if (val && !obj[field]) obj[field] = val;
+        }
+      });
+      const contactPerson = obj.contactPerson || [obj.firstName, obj.lastName].filter(Boolean).join(' ') || '';
+      return { ...obj, contactPerson };
     });
     // Detect duplicates across ALL rows (not just preview)
     const allRows = (rawData||[]).map((row, i) => {
       const obj = {};
-      Object.entries(mapping).forEach(([colIdx, field]) => { if(field) obj[field] = row[colIdx]||''; });
-      return { idx: i, ...obj };
+      Object.entries(mapping).forEach(([colIdx, field]) => {
+        if (field) {
+          const val = (row[colIdx] || '').replace(/^'+/, '').trim();
+          if (val && !obj[field]) obj[field] = val;
+        }
+      });
+      const contactPerson = obj.contactPerson || [obj.firstName, obj.lastName].filter(Boolean).join(' ') || '';
+      return { idx: i, ...obj, contactPerson };
     });
     const dupMap = {};
     allRows.forEach(({ idx, ...row }) => {
@@ -126,14 +144,27 @@ function ImportLeads({ onImport, existingContacts = [] }) {
     const newContacts = (rawData||[]).map((row,i) => {
       // Skip duplicates if user chose to
       if (skipDuplicates && duplicateRows[i]) return null;
+
+      // First non-empty value wins when multiple columns map to the same field
       const obj = {};
-      Object.entries(mapping).forEach(([colIdx, field]) => { if(field) obj[field] = row[colIdx]||''; });
+      Object.entries(mapping).forEach(([colIdx, field]) => {
+        if (field) {
+          const val = (row[colIdx] || '').replace(/^'+/, '').trim(); // strip Apollo's leading apostrophe
+          if (val && !obj[field]) obj[field] = val;
+        }
+      });
+
+      // Combine First Name + Last Name into contactPerson if separate columns were mapped
+      const contactPerson = obj.contactPerson ||
+        [obj.firstName, obj.lastName].filter(Boolean).join(' ') || '';
+
       return {
         id: 'imp_' + Date.now() + '_' + i,
         company: obj.company || 'Unknown Company',
-        contactPerson: obj.contactPerson || '',
+        contactPerson,
         title: obj.title || '',
         phone: obj.phone || '',
+        altPhone: obj.altPhone || '',
         email: obj.email || '',
         notes: [obj.notes, obj.website?`Website: ${obj.website}`:'', obj.address?`Address: ${obj.address}`:''].filter(Boolean).join('\n'),
         stage: 'New Lead',
