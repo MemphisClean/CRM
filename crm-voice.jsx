@@ -280,13 +280,26 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
 
         call.on('accept', () => {
           if (!mounted) return;
-          callSidRef.current = call.parameters?.CallSid || null;
+          // Try to capture CallSid — may not be populated immediately on some SDK versions
+          const sid = call.parameters?.CallSid || call.parameters?.callsid || null;
+          callSidRef.current = sid;
+          // Retry after 800ms in case parameters are populated slightly late
+          if (!sid) {
+            setTimeout(() => {
+              const retrySid = call.parameters?.CallSid || call.parameters?.callsid || null;
+              if (retrySid) callSidRef.current = retrySid;
+            }, 800);
+          }
           setStatus('connected');
           timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
         });
 
         call.on('disconnect', () => {
           if (!mounted) return;
+          // Final attempt to capture CallSid before the call log is written
+          if (!callSidRef.current) {
+            callSidRef.current = call.parameters?.CallSid || call.parameters?.callsid || null;
+          }
           clearInterval(timerRef.current);
           setStatus('ended');
         });
