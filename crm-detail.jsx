@@ -200,12 +200,16 @@ function CallLogModal({ contact, onSave, onClose, prefilledDuration, prefilledCa
       callSid: prefilledCallSid || null,
     };
 
-    // Determine new stage based on outcome
+    // Determine new stage based on outcome — use if/else so rules don't overwrite each other
     let newStage = contact.stage;
-    if (form.outcome.includes('Interested') && !form.outcome.includes('Not') && contact.stage === 'New Lead') newStage = 'Interested';
-    if (form.outcome === 'Answered — Not Interested') newStage = 'Lost';
-    if (contact.stage === 'New Lead' || contact.stage === 'Called') {
-      if (form.outcome.includes('Answered') && !form.outcome.includes('Not')) newStage = 'Called';
+    if (form.outcome === 'Answered — Not Interested') {
+      newStage = 'Lost';
+    } else if (form.outcome.includes('Interested') && !form.outcome.includes('Not')) {
+      // Any "Interested" outcome promotes to Interested from New Lead or Called
+      if (contact.stage === 'New Lead' || contact.stage === 'Called') newStage = 'Interested';
+    } else if (form.outcome.includes('Answered') && !form.outcome.includes('Not')) {
+      // Other answered outcomes (Callback etc.) move New Lead → Called
+      if (contact.stage === 'New Lead') newStage = 'Called';
     }
 
     onSave(entry, form.nextAction, form.nextActionDate ? new Date(form.nextActionDate).toISOString() : null, newStage);
