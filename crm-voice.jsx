@@ -206,7 +206,7 @@ exports.handler = function(context, event, callback) {
 
 // ─── Dialer Modal ─────────────────────────────────────────────────────────────
 // Statuses: 'init' | 'ready' | 'connecting' | 'connected' | 'ended' | 'error'
-function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
+function TwilioDialer({ contact, onClose, onCallEnded, currentUser, minimized, onMinimize, onExpand }) {
   const [status,      setStatus]      = useState9('init');
   const [error,       setError]       = useState9('');
   const [seconds,     setSeconds]     = useState9(0);
@@ -355,6 +355,38 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
   const isPulse = status === 'connecting';
   const isLive  = status === 'connected';
 
+  // ── Minimized floating mini-bar ──
+  if (minimized) {
+    return (
+      <>
+        <div style={{ position:'fixed', bottom:24, left:24, zIndex:9999, background:'#1C1F33', borderRadius:16, padding:'10px 14px', display:'flex', alignItems:'center', gap:10, boxShadow:'0 8px 32px rgba(0,0,0,0.45)', minWidth:240 }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:statusColor, flexShrink:0, display:'inline-block', animation:(isPulse||isLive)?'blink2 1.2s ease-in-out infinite':'none' }} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{contact.company}</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontVariantNumeric:'tabular-nums' }}>{isLive ? fmtDuration(seconds) : statusLabel}</div>
+          </div>
+          {isLive && (
+            <button onClick={handleMute} title={muted?'Unmute':'Mute'} style={{ width:32, height:32, borderRadius:'50%', border:`1.5px solid ${muted?'rgba(245,158,11,0.5)':'rgba(255,255,255,0.2)'}`, background:muted?'rgba(245,158,11,0.12)':'rgba(255,255,255,0.07)', cursor:'pointer', fontSize:15, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {muted?'🔇':'🎙'}
+            </button>
+          )}
+          {(isLive||isPulse) && (
+            <button onClick={handleHangUp} title="Hang up" style={{ width:32, height:32, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:15, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(244,63,94,0.4)' }}>📵</button>
+          )}
+          {(status==='ended'||status==='error') && (
+            <button onClick={handleDone} style={{ padding:'6px 12px', border:'none', borderRadius:8, background:NAVY, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              {status==='ended'?'Log Call':'Close'}
+            </button>
+          )}
+          {onExpand && (
+            <button onClick={onExpand} title="Expand" style={{ width:32, height:32, borderRadius:'50%', border:'1.5px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.07)', cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.7)' }}>⛶</button>
+          )}
+        </div>
+        <style>{`@keyframes blink2{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+      </>
+    );
+  }
+
   return (
     <>
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={status === 'ended' || status === 'error' ? onClose : undefined}>
@@ -362,6 +394,9 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser }) {
 
           {/* Settings button */}
           <button onClick={()=>setShowSettings(true)} title="Twilio Settings" style={{ position:'absolute', top:16, left:16, border:'1.5px solid #E5E7EB', background:'#fff', borderRadius:8, padding:'5px 12px', cursor:'pointer', fontSize:12, fontWeight:700, color:'#374151', display:'flex', alignItems:'center', gap:4 }}>⚙ Twilio</button>
+          {isLive && onMinimize && (
+            <button onClick={onMinimize} title="Minimize — keep call running" style={{ position:'absolute', top:16, right:52, border:'1.5px solid #E5E7EB', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>—</button>
+          )}
           <button onClick={status === 'connected' ? handleHangUp : onClose} style={{ position:'absolute', top:16, right:16, border:'none', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
 
           {/* Avatar ring */}
@@ -473,7 +508,7 @@ const DIAL_KEYS = [
   { k:'*', sub:'' }, { k:'0', sub:'+' }, { k:'#', sub:'' },
 ];
 
-function TwilioManualDialer({ onClose, contactName, defaultNumber, currentUser, onCallEnded }) {
+function TwilioManualDialer({ onClose, contactName, defaultNumber, currentUser, onCallEnded, minimized, onMinimize, onExpand }) {
   const [dialNumber,   setDialNumber]   = useState9(defaultNumber || '');
   const [status,       setStatus]       = useState9('idle'); // idle|init|connecting|connected|ended|error
   const [error,        setError]        = useState9('');
@@ -597,6 +632,45 @@ function TwilioManualDialer({ onClose, contactName, defaultNumber, currentUser, 
 
   const isActive  = status === 'connecting' || status === 'connected';
   const statusColor = { idle:'#9CA3AF', init:'#9CA3AF', connecting:'#F97316', connected:'#10B981', ended:'#6B7280', error:'#F43F5E' }[status];
+  const isLiveM   = status === 'connected';
+  const isPulseM  = status === 'connecting';
+
+  // ── Minimized floating mini-bar ──
+  if (minimized) {
+    return (
+      <>
+        <div style={{ position:'fixed', bottom:24, left:24, zIndex:9999, background:'#1C1F33', borderRadius:16, padding:'10px 14px', display:'flex', alignItems:'center', gap:10, boxShadow:'0 8px 32px rgba(0,0,0,0.45)', minWidth:240 }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background:statusColor, flexShrink:0, display:'inline-block', animation:(isLiveM||isPulseM)?'blink2 1.2s ease-in-out infinite':'none' }} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{contactName || dialNumber || 'Manual Dial'}</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.5)', fontVariantNumeric:'tabular-nums' }}>
+              {isLiveM ? fmtDuration(seconds) : isPulseM ? 'Calling…' : status === 'ended' ? `Ended · ${fmtDuration(seconds)}` : 'Manual Dial'}
+            </div>
+          </div>
+          {isLiveM && (
+            <button onClick={handleMute} title={muted?'Unmute':'Mute'} style={{ width:32, height:32, borderRadius:'50%', border:`1.5px solid ${muted?'rgba(245,158,11,0.5)':'rgba(255,255,255,0.2)'}`, background:muted?'rgba(245,158,11,0.12)':'rgba(255,255,255,0.07)', cursor:'pointer', fontSize:15, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {muted?'🔇':'🎙'}
+            </button>
+          )}
+          {(isLiveM||isPulseM) && (
+            <button onClick={handleHangUp} title="Hang up" style={{ width:32, height:32, borderRadius:'50%', border:'none', background:'#F43F5E', cursor:'pointer', fontSize:15, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(244,63,94,0.4)' }}>📵</button>
+          )}
+          {(status==='ended'||status==='error') && (
+            <button onClick={() => {
+              if (status === 'ended' && onCallEnded) onCallEnded(seconds > 0 ? fmtDuration(seconds) : null, callSidRef.current);
+              onClose();
+            }} style={{ padding:'6px 12px', border:'none', borderRadius:8, background:NAVY, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              {status==='ended'?'Log Call':'Close'}
+            </button>
+          )}
+          {onExpand && (
+            <button onClick={onExpand} title="Expand" style={{ width:32, height:32, borderRadius:'50%', border:'1.5px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.07)', cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.7)' }}>⛶</button>
+          )}
+        </div>
+        <style>{`@keyframes blink2{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+      </>
+    );
+  }
 
   return (
     <>
@@ -609,7 +683,12 @@ function TwilioManualDialer({ onClose, contactName, defaultNumber, currentUser, 
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <button onClick={()=>setShowSettings(true)} style={{ border:'1px solid rgba(255,255,255,0.18)', background:'transparent', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', gap:4 }}>⚙ Twilio</button>
             <div style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,0.5)' }}>Manual Dial</div>
-            <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,0.1)', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:15, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+            <div style={{ display:'flex', gap:6 }}>
+              {isLiveM && onMinimize && (
+                <button onClick={onMinimize} title="Minimize — keep call running" style={{ border:'1px solid rgba(255,255,255,0.18)', background:'rgba(255,255,255,0.08)', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:15, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>—</button>
+              )}
+              <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,0.1)', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:15, color:'rgba(255,255,255,0.65)', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+            </div>
           </div>
 
           {/* Number display */}

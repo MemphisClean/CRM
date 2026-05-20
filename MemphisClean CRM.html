@@ -44,15 +44,15 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="crm-ui.jsx?v=18"></script>
-<script type="text/babel" src="crm-auth.jsx?v=18"></script>
-<script type="text/babel" src="crm-views.jsx?v=18"></script>
-<script type="text/babel" src="crm-detail.jsx?v=18"></script>
-<script type="text/babel" src="crm-import.jsx?v=18"></script>
-<script type="text/babel" src="crm-calendar.jsx?v=18"></script>
-<script type="text/babel" src="crm-manager.jsx?v=18"></script>
-<script type="text/babel" src="crm-email.jsx?v=18"></script>
-<script type="text/babel" src="crm-voice.jsx?v=18"></script>
+<script type="text/babel" src="crm-ui.jsx?v=19"></script>
+<script type="text/babel" src="crm-auth.jsx?v=19"></script>
+<script type="text/babel" src="crm-views.jsx?v=19"></script>
+<script type="text/babel" src="crm-detail.jsx?v=19"></script>
+<script type="text/babel" src="crm-import.jsx?v=19"></script>
+<script type="text/babel" src="crm-calendar.jsx?v=19"></script>
+<script type="text/babel" src="crm-manager.jsx?v=19"></script>
+<script type="text/babel" src="crm-email.jsx?v=19"></script>
+<script type="text/babel" src="crm-voice.jsx?v=19"></script>
 
 <script type="text/babel">
 
@@ -76,6 +76,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeContact, setActiveContact] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [activeDialer, setActiveDialer] = useState(null); // { type:'contact'|'manual', contact, defaultNumber, minimized }
+  const [pendingLog,   setPendingLog]   = useState(null); // { contact, duration, callSid }
   const migrated = useRef(false);
 
   // Real-time Firestore listener — keeps both devices in sync automatically
@@ -171,6 +173,31 @@ function App() {
     if (activeContact && activeContact.id === contact.id) setActiveContact(null);
   };
 
+  // ── Dialer lifted to App level so calls survive ContactDetail closing ──
+  const startCall = (contact) => setActiveDialer({ type:'contact', contact, minimized:false });
+  const startManualCall = (contact, defaultNumber) => setActiveDialer({ type:'manual', contact, defaultNumber: defaultNumber||'', minimized:false });
+
+  const handleActiveCallEnded = (duration, callSid) => {
+    const contact = activeDialer?.contact;
+    setActiveDialer(null);
+    if (contact) setPendingLog({ contact, duration: duration||null, callSid: callSid||null });
+  };
+
+  const handlePendingLogSave = (entry, nextAction, nextActionDate, newStage) => {
+    if (!pendingLog?.contact) return;
+    const fresh = contacts.find(c => c.id === pendingLog.contact.id) || pendingLog.contact;
+    const updated = {
+      ...fresh,
+      callLog: [...(fresh.callLog||[]), entry],
+      lastCallDate: entry.date,
+      nextAction: nextAction || fresh.nextAction,
+      nextActionDate: nextActionDate || fresh.nextActionDate,
+      stage: newStage,
+    };
+    updateContact(updated);
+    setPendingLog(null);
+  };
+
   // Show login screen if not authenticated
   if (!currentUser) {
     return <LoginScreen onLogin={handleLogin} />;
@@ -224,7 +251,9 @@ function App() {
           contact={activeContact}
           onClose={() => setActiveContact(null)}
           onUpdate={updateContact}
-          currentUser={currentUser} />
+          currentUser={currentUser}
+          onStartCall={startCall}
+          onStartManualCall={startManualCall} />
       }
 
       {showAddModal &&
@@ -233,6 +262,37 @@ function App() {
           onClose={() => setShowAddModal(false)}
           existingContacts={contacts} />
       }
+
+      {/* Dialers live at App level — survive ContactDetail closing */}
+      {activeDialer?.type === 'contact' && (
+        <TwilioDialer
+          contact={activeDialer.contact}
+          minimized={activeDialer.minimized}
+          onMinimize={() => setActiveDialer(d => ({...d, minimized:true}))}
+          onExpand={() => setActiveDialer(d => ({...d, minimized:false}))}
+          onClose={() => setActiveDialer(null)}
+          onCallEnded={handleActiveCallEnded}
+          currentUser={currentUser} />
+      )}
+      {activeDialer?.type === 'manual' && (
+        <TwilioManualDialer
+          contactName={activeDialer.contact?.company || ''}
+          defaultNumber={activeDialer.defaultNumber || ''}
+          minimized={activeDialer.minimized}
+          onMinimize={() => setActiveDialer(d => ({...d, minimized:true}))}
+          onExpand={() => setActiveDialer(d => ({...d, minimized:false}))}
+          onClose={() => setActiveDialer(null)}
+          onCallEnded={handleActiveCallEnded}
+          currentUser={currentUser} />
+      )}
+      {pendingLog && (
+        <CallLogModal
+          contact={pendingLog.contact}
+          prefilledDuration={pendingLog.duration}
+          prefilledCallSid={pendingLog.callSid}
+          onSave={handlePendingLogSave}
+          onClose={() => setPendingLog(null)} />
+      )}
     </div>
   );
 }

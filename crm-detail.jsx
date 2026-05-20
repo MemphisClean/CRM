@@ -386,18 +386,13 @@ function AddContactModal({ onSave, onClose, editContact, existingContacts = [] }
   );
 }
 
-function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
-  const [showCallModal,       setShowCallModal]       = useState3(false);
-  const [showEditModal,       setShowEditModal]       = useState3(false);
-  const [showEmailModal,      setShowEmailModal]      = useState3(false);
-  const [showDialer,          setShowDialer]          = useState3(false);
-  const [showManualDialer,    setShowManualDialer]    = useState3(false);
-  const [dialerPrefilledDuration, setDialerPrefilledDuration] = useState3(null);
-  const [dialerCallSid,       setDialerCallSid]       = useState3(null);
-  const [dialerContact,       setDialerContact]       = useState3(null); // overrides contact for additional people
-  const [emailTarget,         setEmailTarget]         = useState3(null); // null = primary, else person obj
-  const [showPersonModal,     setShowPersonModal]     = useState3(false);
-  const [editingPerson,       setEditingPerson]       = useState3(null);
+function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser, onStartCall, onStartManualCall }) {
+  const [showCallModal,   setShowCallModal]   = useState3(false);
+  const [showEditModal,   setShowEditModal]   = useState3(false);
+  const [showEmailModal,  setShowEmailModal]  = useState3(false);
+  const [emailTarget,     setEmailTarget]     = useState3(null);
+  const [showPersonModal, setShowPersonModal] = useState3(false);
+  const [editingPerson,   setEditingPerson]   = useState3(null);
 
   const handleAddPerson = (person) => {
     const updated = { ...contact, additionalContacts: [...(contact.additionalContacts||[]), person] };
@@ -424,25 +419,16 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
   };
 
   const callPerson = (person) => {
-    if (person) {
-      setDialerContact({ ...contact, contactPerson: person.name, phone: person.phone, altPhone: person.altPhone||'' });
-    } else {
-      setDialerContact(null);
-    }
-    setShowDialer(true);
+    const callContact = person
+      ? { ...contact, contactPerson: person.name, phone: person.phone, altPhone: person.altPhone||'' }
+      : contact;
+    onStartCall && onStartCall(callContact);
   };
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-ZA',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : '—';
   const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'}) : '';
   const outcomeColor = o => o.includes('Interested')&&!o.includes('Not')?'#10B981':o.includes('Not')?'#F43F5E':o.includes('Callback')?'#F97316':'#6B7280';
   const fmtR = n => n>=1000?`R${(n/1000).toFixed(0)}k/mo`:`R${n}/mo`;
 
-  const handleCallEnded = (duration, callSid) => {
-    setDialerPrefilledDuration(duration);
-    setDialerCallSid(callSid || null);
-    setShowDialer(false);
-    setShowManualDialer(false);
-    setShowCallModal(true);
-  };
 
   const handleEmailSent = (emailRecord) => {
     const updated = {
@@ -490,11 +476,11 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
         <div style={{ flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:16 }}>
           {/* Actions */}
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            <button onClick={()=>setShowDialer(true)} style={{ flex:1, minWidth:100, padding:'9px', background:GOLD, border:'none', borderRadius:8, color:NAVY, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            <button onClick={()=>onStartCall && onStartCall(contact)} style={{ flex:1, minWidth:100, padding:'9px', background:GOLD, border:'none', borderRadius:8, color:NAVY, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
               <Icon path="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" size={15} color={NAVY} />
               Call
             </button>
-            <button onClick={()=>setShowManualDialer(true)} title={contact.altPhone ? `Dial alternate: ${contact.altPhone}` : 'Dial an alternate number'} style={{ padding:'9px 11px', background: contact.altPhone ? '#FEF9EC' : '#fff', border:`1.5px solid ${contact.altPhone ? '#FDE68A' : '#E5E7EB'}`, borderRadius:8, color: contact.altPhone ? '#92680A' : '#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+            <button onClick={()=>onStartManualCall && onStartManualCall(contact, contact.altPhone||'')} title={contact.altPhone ? `Dial alternate: ${contact.altPhone}` : 'Dial an alternate number'} style={{ padding:'9px 11px', background: contact.altPhone ? '#FEF9EC' : '#fff', border:`1.5px solid ${contact.altPhone ? '#FDE68A' : '#E5E7EB'}`, borderRadius:8, color: contact.altPhone ? '#92680A' : '#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
               <Icon path="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" size={14} color={contact.altPhone ? '#92680A' : '#374151'} />
               Alt #
             </button>
@@ -630,9 +616,7 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser }) {
         </div>
       </div>
 
-      {showDialer && <TwilioDialer contact={dialerContact || contact} onClose={()=>{setShowDialer(false);setDialerContact(null);}} onCallEnded={handleCallEnded} currentUser={currentUser} />}
-      {showManualDialer && <TwilioManualDialer onClose={()=>setShowManualDialer(false)} onCallEnded={handleCallEnded} contactName={contact.company} defaultNumber={contact.altPhone||''} currentUser={currentUser} />}
-      {showCallModal && <CallLogModal contact={contact} prefilledDuration={dialerPrefilledDuration} prefilledCallSid={dialerCallSid} onSave={handleLogSave} onClose={()=>{setShowCallModal(false);setDialerPrefilledDuration(null);setDialerCallSid(null);}} />}
+      {showCallModal && <CallLogModal contact={contact} onSave={handleLogSave} onClose={()=>setShowCallModal(false)} />}
       {showEditModal && <AddContactModal editContact={contact} onSave={(updated)=>{onUpdate(updated);setShowEditModal(false);}} onClose={()=>setShowEditModal(false)} />}
       {showEmailModal && (
         <EmailComposer
