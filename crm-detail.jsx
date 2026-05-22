@@ -204,6 +204,9 @@ function CallLogModal({ contact, onSave, onClose, prefilledDuration, prefilledCa
     let newStage = contact.stage;
     if (form.outcome === 'Answered — Not Interested') {
       newStage = 'Lost';
+    } else if (form.outcome === 'Appointment Set') {
+      // Appointment Set moves contact to Appointment Set from any early stage
+      if (['New Lead','Called','Interested'].includes(contact.stage)) newStage = 'Appointment Set';
     } else if (form.outcome.includes('Interested') && !form.outcome.includes('Not')) {
       // Any "Interested" outcome promotes to Interested from New Lead or Called
       if (contact.stage === 'New Lead' || contact.stage === 'Called') newStage = 'Interested';
