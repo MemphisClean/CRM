@@ -393,10 +393,76 @@ function AddContactModal({ onSave, onClose, editContact, existingContacts = [] }
   );
 }
 
+// ─── Quote Modal ──────────────────────────────────────────────────────────────
+function QuoteModal({ contact, onSave, onClose }) {
+  const [amount,   setAmount]   = useState3(contact.quoteAmount || '');
+  const [services, setServices] = useState3(contact.services || []);
+  const [notes,    setNotes]    = useState3(contact.quoteNotes || '');
+  const [date,     setDate]     = useState3(
+    contact.quoteDate
+      ? new Date(contact.quoteDate).toISOString().slice(0,10)
+      : new Date().toISOString().slice(0,10)
+  );
+
+  const toggleService = s => setServices(prev =>
+    prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+  );
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:16, width:480, padding:'28px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', maxHeight:'85vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:22 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#1A1D2E' }}>Enter Quote</h2>
+            <p style={{ margin:'3px 0 0', fontSize:12, color:'#6B7280' }}>{contact.company} — moves contact to Quoted</p>
+          </div>
+          <button onClick={onClose} style={{ border:'none', background:'#F3F4F6', borderRadius:8, width:30, height:30, cursor:'pointer', fontSize:16, color:'#6B7280' }}>×</button>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Monthly Quote Amount</label>
+            <div style={{ position:'relative' }}>
+              <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', fontSize:13, color:'#6B7280', fontWeight:600 }}>$</span>
+              <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0" style={{ width:'100%', padding:'8px 10px 8px 22px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' }} />
+              <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'#9CA3AF' }}>/mo</span>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:8 }}>Services Quoted</label>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {detailServiceOptions.map(s => (
+                <button key={s} onClick={()=>toggleService(s)} style={{ padding:'5px 12px', borderRadius:99, border:`1.5px solid ${services.includes(s)?NAVY:'#E5E7EB'}`, background:services.includes(s)?NAVY+'18':'#fff', color:services.includes(s)?NAVY:'#6B7280', fontSize:12, fontWeight:600, cursor:'pointer', transition:'all 0.15s' }}>{s}</button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Quote Date</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' }} />
+          </div>
+
+          <div>
+            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Notes / Scope</label>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="e.g. Includes weekday cleaning, 3× per week, supplies included…" style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #E5E7EB', borderRadius:8, fontSize:13, outline:'none', resize:'vertical', fontFamily:'inherit', boxSizing:'border-box' }} />
+          </div>
+        </div>
+
+        <div style={{ display:'flex', gap:10, marginTop:22, justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'8px 18px', border:'1.5px solid #E5E7EB', borderRadius:8, background:'#fff', color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+          <button onClick={() => onSave({ quoteAmount: Number(amount)||0, services, quoteNotes: notes, quoteDate: date ? new Date(date).toISOString() : new Date().toISOString(), stage:'Quoted' })} style={{ padding:'8px 20px', border:'none', borderRadius:8, background:NAVY, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>Save Quote</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser, onStartCall, onStartManualCall }) {
   const [showCallModal,   setShowCallModal]   = useState3(false);
   const [showEditModal,   setShowEditModal]   = useState3(false);
   const [showEmailModal,  setShowEmailModal]  = useState3(false);
+  const [showQuoteModal,  setShowQuoteModal]  = useState3(false);
   const [emailTarget,     setEmailTarget]     = useState3(null);
   const [showPersonModal, setShowPersonModal] = useState3(false);
   const [editingPerson,   setEditingPerson]   = useState3(null);
@@ -495,6 +561,10 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser, onS
               <Icon path="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" size={14} color='#374151' />
               Log
             </button>
+            <button onClick={()=>setShowQuoteModal(true)} style={{ padding:'9px 12px', background: contact.stage==='Quoted'?'#EEF2FF':'#fff', border:`1.5px solid ${contact.stage==='Quoted'?NAVY:'#E5E7EB'}`, borderRadius:8, color: contact.stage==='Quoted'?NAVY:'#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+              <Icon path="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" size={14} color={contact.stage==='Quoted'?NAVY:'#374151'} />
+              Quote
+            </button>
             <button onClick={()=>setShowEmailModal(true)} style={{ padding:'9px 12px', background:'#fff', border:'1.5px solid #E5E7EB', borderRadius:8, color:'#374151', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
               <Icon path="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" size={14} color='#374151' />
               Email
@@ -565,6 +635,32 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser, onS
             </div>
           )}
 
+          {/* Quote Details */}
+          {(contact.quoteAmount > 0 || contact.quoteDate || contact.quoteNotes) && (
+            <div style={{ background:'#F0F4FF', borderRadius:10, padding:'14px 16px', border:`1.5px solid ${NAVY}30` }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:NAVY, textTransform:'uppercase', letterSpacing:'0.06em' }}>Quote Details</div>
+                <button onClick={()=>setShowQuoteModal(true)} style={{ fontSize:11, color:NAVY, background:`${NAVY}12`, border:`1px solid ${NAVY}25`, borderRadius:6, padding:'3px 9px', cursor:'pointer', fontWeight:600 }}>Edit</button>
+              </div>
+              {contact.quoteAmount > 0 && (
+                <div style={{ fontSize:26, fontWeight:800, color:NAVY, marginBottom:4 }}>
+                  ${contact.quoteAmount.toLocaleString()}<span style={{ fontSize:13, fontWeight:500, color:'#6B7280' }}>/mo</span>
+                </div>
+              )}
+              {contact.quoteDate && (
+                <div style={{ fontSize:12, color:'#6B7280', marginBottom:6 }}>Quoted {fmtDate(contact.quoteDate)}</div>
+              )}
+              {(contact.services||[]).length > 0 && (
+                <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom: contact.quoteNotes ? 8 : 0 }}>
+                  {contact.services.map(s => <span key={s} style={{ fontSize:11, background:`${NAVY}12`, color:NAVY, borderRadius:99, padding:'2px 8px', fontWeight:600 }}>{s}</span>)}
+                </div>
+              )}
+              {contact.quoteNotes && (
+                <p style={{ margin:0, fontSize:12, color:'#374151', lineHeight:1.6 }}>{contact.quoteNotes}</p>
+              )}
+            </div>
+          )}
+
           {/* Notes */}
           {contact.notes && (
             <div style={{ background:'#fff', borderRadius:10, padding:'14px 16px', border:'1px solid #E9EBF0' }}>
@@ -624,6 +720,12 @@ function ContactDetail({ contact, onClose, onUpdate, onLogCall, currentUser, onS
       </div>
 
       {showCallModal && <CallLogModal contact={contact} onSave={handleLogSave} onClose={()=>setShowCallModal(false)} />}
+      {showQuoteModal && (
+        <QuoteModal
+          contact={contact}
+          onSave={(quoteData) => { onUpdate({ ...contact, ...quoteData }); setShowQuoteModal(false); }}
+          onClose={()=>setShowQuoteModal(false)} />
+      )}
       {showEditModal && <AddContactModal editContact={contact} onSave={(updated)=>{onUpdate(updated);setShowEditModal(false);}} onClose={()=>setShowEditModal(false)} />}
       {showEmailModal && (
         <EmailComposer
