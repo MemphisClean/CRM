@@ -45,15 +45,15 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="crm-ui.jsx?v=23"></script>
-<script type="text/babel" src="crm-auth.jsx?v=23"></script>
-<script type="text/babel" src="crm-views.jsx?v=23"></script>
-<script type="text/babel" src="crm-detail.jsx?v=23"></script>
-<script type="text/babel" src="crm-import.jsx?v=23"></script>
-<script type="text/babel" src="crm-calendar.jsx?v=23"></script>
-<script type="text/babel" src="crm-manager.jsx?v=23"></script>
-<script type="text/babel" src="crm-email.jsx?v=23"></script>
-<script type="text/babel" src="crm-voice.jsx?v=23"></script>
+<script type="text/babel" src="crm-ui.jsx?v=24"></script>
+<script type="text/babel" src="crm-auth.jsx?v=24"></script>
+<script type="text/babel" src="crm-views.jsx?v=24"></script>
+<script type="text/babel" src="crm-detail.jsx?v=24"></script>
+<script type="text/babel" src="crm-import.jsx?v=24"></script>
+<script type="text/babel" src="crm-calendar.jsx?v=24"></script>
+<script type="text/babel" src="crm-manager.jsx?v=24"></script>
+<script type="text/babel" src="crm-email.jsx?v=24"></script>
+<script type="text/babel" src="crm-voice.jsx?v=24"></script>
 
 <script type="text/babel">
 
@@ -75,7 +75,12 @@ function App() {
   const migrated = useRef(false);
 
   // Real-time Firestore listener — keeps both devices in sync automatically
+  // Only subscribe to contacts once Firebase Auth has resolved and user is logged in
   useEffect(() => {
+    if (!currentUser) {
+      setLoading(true); // reset for next login
+      return;
+    }
     const unsub = db.collection('contacts').onSnapshot((snap) => {
       const loaded = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setContactsState(loaded);
@@ -85,7 +90,7 @@ function App() {
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [!!currentUser]);
 
   // One-time migration: if contacts exist in localStorage, push them to Firestore
   useEffect(() => {
