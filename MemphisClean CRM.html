@@ -16,6 +16,7 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyC0WVIUgIjDUVAuayTvKBBefikh9UMjl-U",
@@ -44,40 +45,33 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="crm-ui.jsx?v=22"></script>
-<script type="text/babel" src="crm-auth.jsx?v=22"></script>
-<script type="text/babel" src="crm-views.jsx?v=22"></script>
-<script type="text/babel" src="crm-detail.jsx?v=22"></script>
-<script type="text/babel" src="crm-import.jsx?v=22"></script>
-<script type="text/babel" src="crm-calendar.jsx?v=22"></script>
-<script type="text/babel" src="crm-manager.jsx?v=22"></script>
-<script type="text/babel" src="crm-email.jsx?v=22"></script>
-<script type="text/babel" src="crm-voice.jsx?v=22"></script>
+<script type="text/babel" src="crm-ui.jsx?v=23"></script>
+<script type="text/babel" src="crm-auth.jsx?v=23"></script>
+<script type="text/babel" src="crm-views.jsx?v=23"></script>
+<script type="text/babel" src="crm-detail.jsx?v=23"></script>
+<script type="text/babel" src="crm-import.jsx?v=23"></script>
+<script type="text/babel" src="crm-calendar.jsx?v=23"></script>
+<script type="text/babel" src="crm-manager.jsx?v=23"></script>
+<script type="text/babel" src="crm-email.jsx?v=23"></script>
+<script type="text/babel" src="crm-voice.jsx?v=23"></script>
 
 <script type="text/babel">
 
 const { useState, useEffect, useRef } = React;
 
-const AUTH_KEY = 'memphisclean_crm_auth';
 const OLD_STORAGE_KEY = 'memphisclean_crm_v1'; // for one-time migration only
 
-function loadSession() {
-  try {
-    const saved = localStorage.getItem(AUTH_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
-  return null;
-}
-
 function App() {
-  const [currentUser, setCurrentUser] = useState(loadSession);
-  const [view, setView] = useState('queue');
-  const [contacts, setContactsState] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeContact, setActiveContact] = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [activeDialer, setActiveDialer] = useState(null); // { type:'contact'|'manual', contact, defaultNumber, minimized }
-  const [pendingLog,   setPendingLog]   = useState(null); // { contact, duration, callSid }
+  const [currentUser,  setCurrentUser]  = useState(null);
+  const [authLoading,  setAuthLoading]  = useState(true);
+  const [authError,    setAuthError]    = useState('');
+  const [view,         setView]         = useState('queue');
+  const [contacts,     setContactsState] = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [activeContact,setActiveContact] = useState(null);
+  const [showAddModal, setShowAddModal]  = useState(false);
+  const [activeDialer, setActiveDialer]  = useState(null);
+  const [pendingLog,   setPendingLog]    = useState(null);
   const migrated = useRef(false);
 
   // Real-time Firestore listener — keeps both devices in sync automatically
@@ -113,16 +107,41 @@ function App() {
     } catch (e) {}
   }, []);
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-    try { localStorage.setItem(AUTH_KEY, JSON.stringify(user)); } catch (e) {}
-    setView(user.role === 'admin' ? 'dashboard' : 'queue');
-  };
+  // Firebase Auth state — drives login/logout across all devices
+  useEffect(() => {
+    const unsub = firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const snap = await db.collection('reps')
+            .where('email', '==', firebaseUser.email.toLowerCase())
+            .limit(1).get();
+          if (!snap.empty) {
+            const profile = snap.docs[0].data();
+            setCurrentUser({ ...profile, firebaseUid: firebaseUser.uid });
+            setView(profile.role === 'admin' ? 'dashboard' : 'queue');
+            setAuthError('');
+          } else {
+            setAuthError('No CRM profile found for this account. Ask your administrator to add you in Settings.');
+            await firebase.auth().signOut();
+          }
+        } catch (e) {
+          setAuthError('Failed to load your profile. Please try again.');
+          await firebase.auth().signOut();
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   const handleLogout = () => {
+    firebase.auth().signOut().catch(console.error);
     setCurrentUser(null);
-    try { localStorage.removeItem(AUTH_KEY); } catch (e) {}
     setActiveContact(null);
+    setActiveDialer(null);
+    setPendingLog(null);
   };
 
   // Firestore-aware setContacts — used by Pipeline/CallQueue for stage moves etc.
@@ -198,9 +217,21 @@ function App() {
     setPendingLog(null);
   };
 
+  // Show spinner while Firebase Auth resolves
+  if (authLoading) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#F8F9FC' }}>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ width:40, height:40, border:'3px solid #2B3990', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 14px' }}></div>
+          <div style={{ color:'#6B7280', fontSize:14, fontWeight:500 }}>Checking credentials…</div>
+        </div>
+      </div>
+    );
+  }
+
   // Show login screen if not authenticated
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen authError={authError} />;
   }
 
   // Loading spinner while Firestore fetches data
