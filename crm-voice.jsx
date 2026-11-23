@@ -7,6 +7,15 @@ function loadVoiceSettings() {
   try { return JSON.parse(localStorage.getItem(VOICE_SETTINGS_KEY)) || {}; } catch { return {}; }
 }
 
+// Sends the CRM login (Firebase ID token) so the call server knows who is asking for a calling token
+async function voiceAuthHeaders() {
+  try {
+    const u = firebase.auth().currentUser;
+    if (u) return { Authorization: 'Bearer ' + await u.getIdToken() };
+  } catch (e) {}
+  return {};
+}
+
 // Fetch latest settings from Firestore and cache locally
 async function fetchVoiceSettings() {
   try {
@@ -48,7 +57,7 @@ function TwilioVoiceSettings({ onClose, currentUser }) {
     setTestState('testing');
     setTestMsg('');
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(url, { headers: await voiceAuthHeaders() });
       if (!resp.ok) {
         setTestState('fail');
         setTestMsg(`HTTP ${resp.status} — check your Twilio Function is deployed and public.`);
@@ -256,7 +265,7 @@ function TwilioDialer({ contact, onClose, onCallEnded, currentUser, minimized, o
         if (!mounted) return;
         if (!sdkReady) { setStatus('error'); setError('Twilio Voice SDK failed to load. Please reload the page and try again.'); return; }
 
-        const resp = await fetch(settings.tokenUrl);
+        const resp = await fetch(settings.tokenUrl, { headers: await voiceAuthHeaders() });
         if (!resp.ok) throw new Error(`Token fetch failed: HTTP ${resp.status}`);
         const { token } = await resp.json();
 
@@ -571,7 +580,7 @@ function TwilioManualDialer({ onClose, contactName, defaultNumber, currentUser, 
       if (!mounted) return;
       if (!sdkReady) { setStatus('error'); setError('Twilio Voice SDK failed to load. Please reload and try again.'); return; }
 
-      const resp = await fetch(settings.tokenUrl);
+      const resp = await fetch(settings.tokenUrl, { headers: await voiceAuthHeaders() });
       if (!resp.ok) throw new Error(`Token fetch failed: HTTP ${resp.status}`);
       const { token } = await resp.json();
       if (!mounted) return;
